@@ -1,0 +1,211 @@
+import { renderPlantilla, type ConfigEnvio } from '@crm/shared'
+import { env } from '../env'
+import { logger } from '../logger'
+import { supabase } from '../supabase'
+import { enviarTexto, verificarNumero, whatsappConectado } from '../whatsapp/client'
+
+const MAX_INTENTOS = 3
+
+let corriendo = false
+let timer: NodeJS.Timeout | null = null
+let enviadosDesdePausaLarga = 0
+
+function randInt(min: number, max: number): number {
+  return Math.floor(min + Math.random() * (max - min + 1))
+}
+
+function horaLocal(): number {
+  const h = new Date().getUTCHours() + env.HORARIO_TZ_OFFSET
+  return ((h % 24) + 24) % 24
+}
+
+function hoyISO(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function agendar(ms: number): void {
+  timer = setTimeout(tick, ms)
+}
+
+async function getConfig(): Promise<ConfigEnvio | null> {
+  const { data, error } = await supabase
+    .from('config_envio')
+    .select('*')
+    .eq('id', 'default')
+    .maybeSingle()
+  if (error) {
+    logger.error({ err: error }, 'getConfig')
+    return null
+  }
+  return data as ConfigEnvio | null
+}
+
+/** Marca como 'finalizada' toda campana en curso que ya no tiene pendientes. */
+async function finalizarCampanasVacias(): Promise<void> {
+  const { data: enCurso } = await supabase
+    .from('campanas')
+    .select('id')
+    .eq('estado', 'en_curso')
+
+  for (const c of enCurso ?? []) {
+    const { count } = await supabase
+      .from('campana_destinatarios')
+      .select('id', { count: 'exact', head: true })
+      .eq('id_campana', c.id)
+      .eq('estado', 'pendiente')
+    if ((count ?? 0) === 0) {
+      await supabase.from('campanas').update({ estado: 'finalizada' }).eq('id', c.id)
+      logger.info({ campana: c.id }, 'Campana finalizada')
+    }
+  }
+}
+
+/** Toma el siguiente destinatario pendiente de cualquier campana en curso. */
+async function tomarSiguiente() {
+  const { data, error } = await supabase
+    .from('campana_destinatarios')
+    .select('*, campanas!inner(id, estado, plantilla_texto, id_sucursal, sucursales(nombre))')
+    .eq('estado', 'pendiente')
+    .eq('campanas.estado', 'en_curso')
+    .order('creado_en', { ascending: true })
+    .limit(1)
+  if (error) {
+    logger.error({ err: error }, 'tomarSiguiente')
+    return null
+  }
+  return data?.[0] ?? null
+}
+
+async function procesar(dest: any): Promise<'enviado' | 'omitido' | 'sin_whatsapp' | 'fallido' | 'reintentar'> {
+  const campana = dest.campanas
+  const { data: cliente } = await supabase
+    .from('clientes')
+    .select('nombre, estado')
+    .eq('id', dest.id_cliente)
+    .maybeSingle()
+
+  const { data: optOut } = await supabase
+    .from('opt_outs')
+    .select('celular_e164')
+    .eq('celular_e164', dest.celular_snapshot)
+    .maybeSingle()
+
+  if (!cliente || cliente.estado === 'baja' || optOut) {
+    await supabase
+      .from('campana_destinatarios')
+      .update({ estado: 'omitido', enviado_en: new Date().toISOString() })
+      .eq('id', dest.id)
+    return 'omitido'
+  }
+
+  const jid = await verificarNumero(dest.celular_snapshot)
+  if (!jid) {
+    await supabase
+      .from('campana_destinatarios')
+      .update({ estado: 'sin_whatsapp', intento: dest.intento + 1 })
+      .eq('id', dest.id)
+    return 'sin_whatsapp'
+  }
+
+  const texto = renderPlantilla(campana.plantilla_texto, {
+    nombre: cliente.nombre,
+    sucursal: campana.sucursales?.nombre ?? null,
+  })
+
+  try {
+    await enviarTexto(jid, texto)
+    await supabase
+      .from('campana_destinatarios')
+      .update({
+        estado: 'enviado',
+        intento: dest.intento + 1,
+        enviado_en: new Date().toISOString(),
+        error: null,
+      })
+      .eq('id', dest.id)
+    return 'enviado'
+  } catch (e: any) {
+    const intento = dest.intento + 1
+    const agotado = intento >= MAX_INTENTOS
+    await supabase
+      .from('campana_destinatarios')
+      .update({
+        estado: agotado ? 'fallido' : 'pendiente',
+        intento,
+        error: String(e?.message ?? e).slice(0, 500),
+      })
+      .eq('id', dest.id)
+    logger.warn({ dest: dest.id, intento, err: e?.message }, 'fallo envio')
+    return agotado ? 'fallido' : 'reintentar'
+  }
+}
+
+async function tick(): Promise<void> {
+  try {
+    if (!whatsappConectado()) return agendar(15_000)
+
+    const cfg = await getConfig()
+    if (!cfg || !cfg.activo) return agendar(30_000)
+
+    const hora = horaLocal()
+    if (hora < cfg.hora_inicio || hora >= cfg.hora_fin) return agendar(60_000)
+
+    // Contador diario
+    const hoy = hoyISO()
+    let contador = cfg.contador_hoy
+    if (cfg.contador_fecha !== hoy) {
+      contador = 0
+      await supabase
+        .from('config_envio')
+        .update({ contador_fecha: hoy, contador_hoy: 0 })
+        .eq('id', 'default')
+    }
+    if (contador >= cfg.tope_diario) {
+      logger.info({ contador, tope: cfg.tope_diario }, 'Tope diario alcanzado')
+      return agendar(5 * 60_000)
+    }
+
+    await finalizarCampanasVacias()
+
+    const dest = await tomarSiguiente()
+    if (!dest) return agendar(20_000)
+
+    const resultado = await procesar(dest)
+
+    // Solo un envio real cuenta para el tope y las pausas
+    let delay = randInt(cfg.delay_min_seg, cfg.delay_max_seg) * 1000
+    if (resultado === 'enviado') {
+      await supabase
+        .from('config_envio')
+        .update({ contador_hoy: contador + 1, contador_fecha: hoy })
+        .eq('id', 'default')
+      enviadosDesdePausaLarga++
+      if (cfg.pausa_cada > 0 && enviadosDesdePausaLarga >= cfg.pausa_cada) {
+        enviadosDesdePausaLarga = 0
+        delay += cfg.pausa_larga_seg * 1000
+        logger.info({ seg: cfg.pausa_larga_seg }, 'Pausa larga entre lotes')
+      }
+    } else {
+      // omitido / sin_whatsapp / reintentar: pasar al siguiente mas rapido
+      delay = randInt(5, 12) * 1000
+    }
+
+    logger.info({ dest: dest.id, resultado, proximoEnMs: delay }, 'destinatario procesado')
+    agendar(delay)
+  } catch (e) {
+    logger.error({ err: e }, 'tick')
+    agendar(30_000)
+  }
+}
+
+export function startWorker(): void {
+  if (corriendo) return
+  corriendo = true
+  logger.info('Worker de difusion iniciado')
+  agendar(3_000)
+}
+
+export function stopWorker(): void {
+  if (timer) clearTimeout(timer)
+  corriendo = false
+}

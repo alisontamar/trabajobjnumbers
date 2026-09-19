@@ -1,0 +1,19 @@
+{
+  "name": "crm-difusion",
+  "private": true,
+  "version": "0.1.0",
+  "description": "CRM de captacion de clientes en caja + motor de difusion por WhatsApp",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev -w @crm/web",
+    "dev:engine": "npm run dev -w @crm/engine",
+    "build:web": "npm run build -w @crm/web",
+    "typecheck": "npm run typecheck -w @crm/web && npm run typecheck -w @crm/engine"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
