@@ -8,6 +8,7 @@ import Dashboard from './pages/admin/Dashboard'
 import Campanas from './pages/admin/Campanas'
 import CampanaNueva from './pages/admin/CampanaNueva'
 import WhatsAppPage from './pages/admin/WhatsApp'
+import Usuarios from './pages/admin/Usuarios'
 
 export default function App() {
   const { perfil } = useAuth()
@@ -52,8 +53,16 @@ export default function App() {
         <Route
           path="admin/whatsapp"
           element={
-            <ProtectedRoute roles={['admin']}>
+            <ProtectedRoute roles={['supervisor', 'admin']}>
               <WhatsAppPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/usuarios"
+          element={
+            <ProtectedRoute roles={['supervisor', 'admin']}>
+              <Usuarios />
             </ProtectedRoute>
           }
         />

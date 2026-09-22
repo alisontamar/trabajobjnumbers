@@ -19,17 +19,22 @@ trabajobj/
 
 | Pieza | Rol |
 |---|---|
-| **web** | Cajero registra clientes; admin redacta campanas y las dispara |
+| **web** | Cajero registra clientes; admin de sucursal redacta campanas y las dispara |
 | **Supabase** | Postgres + Auth + RLS. `campana_destinatarios` **es la cola** |
-| **engine** | 1 conexion Baileys + 1 worker serial. Lee la cola, verifica numero, envia con delay aleatorio y ventana horaria. Persiste la sesion en `whatsapp_auth` |
+| **engine** | 1 conexion Baileys + 1 worker serial **por sucursal**. Lee su cola, verifica numero, envia con delay aleatorio y ventana horaria. Persiste la sesion en `whatsapp_auth` |
 
-Roles: `cajero` (alta de clientes de su sucursal), `supervisor` (+ campanas de su
-sucursal), `admin` (todo + WhatsApp + config). El engine usa la `service_role` key
-y **omite RLS**.
+Roles (columna `rol` en `perfiles`, sin cambios de nombre en la base de datos):
+- `admin` = **superadmin**: ve y gestiona todas las sucursales, WhatsApp y config de todas, crea cualquier cuenta.
+- `supervisor` = **admin de sucursal**: alta de clientes + campanas + WhatsApp + config, todo limitado a SU sucursal; puede crear cuentas de `cajero` para su propia sucursal desde **Usuarios**.
+- `cajero`: solo alta de clientes de su sucursal.
 
-> Un solo numero de WhatsApp = un solo tope de envio diario compartido por todas
-> las sucursales. El worker es una unica cola serial global; las campanas de
-> distintas sucursales se intercalan.
+El engine usa la `service_role` key y **omite RLS**; la autorizacion por sucursal
+(quien puede disparar campanas, reconectar WhatsApp o crear usuarios) se valida
+en `apps/engine/src/api/server.ts`.
+
+> Cada sucursal tiene su propio numero de WhatsApp, su propio QR y su propio
+> tope diario / ventana horaria (`config_envio` tiene una fila por sucursal).
+> Las campanas de una sucursal nunca comparten cola ni limite con las de otra.
 
 ---
 
@@ -47,18 +52,18 @@ npm install
 ```
 
 ### 2. Supabase
-1. En el proyecto Supabase -> **SQL Editor**:
-   - Pega y ejecuta `supabase/migrations/0001_init.sql`
-   - Pega y ejecuta `supabase/migrations/0002_rls.sql`
-   - Pega y ejecuta `supabase/seed.sql`
-2. **Authentication -> Users -> Add user**: crea tu usuario admin (email + password).
+1. En el proyecto Supabase -> **SQL Editor**: pega y ejecuta `supabase/schema.sql`
+   (crea todo el esquema, RLS y las 3 sucursales con sus numeros).
+2. **Authentication -> Users -> Add user**: crea tu **primer superadmin** (email + password).
 3. Copia su UID y en el SQL Editor:
    ```sql
    insert into public.perfiles (user_id, rol, id_sucursal, nombre)
    values ('<UID>', 'admin', null, 'Admin');
    ```
-4. **Project Settings -> API**: anota `Project URL`, la `anon` key y la
-   `service_role` key.
+   (Este es el UNICO usuario que necesitas crear a mano. Los admins de
+   sucursal y los cajeros se crean despues desde el panel **Usuarios** de la web.)
+4. **Project Settings -> API**: anota `Project URL`, la clave publica
+   (`anon` / `publishable`, formato `sb_publishable_...`) y la `service_role` key.
 
 ### 3. Engine (local)
 ```bash
@@ -74,20 +79,19 @@ cd apps/web
 cp .env.example .env      # VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_ENGINE_URL=http://localhost:8080
 npm run dev
 ```
-Abre `http://localhost:5173`, inicia sesion como admin, ve a **WhatsApp** y escanea el QR.
+Abre `http://localhost:5173`, inicia sesion como superadmin, ve a **WhatsApp** y
+veras un QR por cada sucursal (Central, Santa Cruz, Prado) — escanea cada uno
+con el celular/SIM correspondiente a ese numero.
 
 ### 5. Probar el flujo
-1. Crea un cajero/supervisor: **Authentication -> Users -> Add user**, luego
-   ```sql
-   insert into public.perfiles (user_id, rol, id_sucursal, nombre)
-   values ('<UID>', 'cajero',
-           (select id from public.sucursales where nombre = 'Central'), 'Cajero 1');
-   ```
+1. En **Usuarios**, crea un admin de sucursal (`supervisor`) para Central. Ese
+   admin de sucursal, al iniciar sesion, puede a su vez crear cajeros para
+   Central desde la misma pantalla (queda limitado a su propia sucursal).
 2. En **Caja** registra 1-2 clientes con tu propio numero.
 3. En **Campanas -> Nueva**: elige sucursal, escribe el mensaje con `{nombre}`,
    guarda el borrador.
-4. **Disparar**. El engine crea la cola y empieza a enviar respetando el tope y
-   los delays (config en la pestana **WhatsApp**).
+4. **Disparar**. El engine de esa sucursal crea la cola y empieza a enviar
+   respetando su propio tope y delays (config en la pestana **WhatsApp**).
 
 ---
 
@@ -104,8 +108,9 @@ Abre `http://localhost:5173`, inicia sesion como admin, ve a **WhatsApp** y esca
 1. New Project -> Deploy from GitHub repo.
 2. **Root Directory**: `apps/engine`  (Nixpacks detecta Node; hay `Dockerfile` de respaldo).
 3. Variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
-   `ADMIN_ORIGINS=https://<tu-web>.vercel.app`, `WA_SESSION_ID=default`,
-   `HORARIO_TZ_OFFSET=-4`. (Railway inyecta `PORT`.)
+   `ADMIN_ORIGINS=https://<tu-web>.vercel.app`, `HORARIO_TZ_OFFSET=-4`.
+   (Railway inyecta `PORT`. Ya no hace falta `WA_SESSION_ID`: el engine arranca
+   una sesion por cada fila de `sucursales` automaticamente.)
 4. Deploy. Copia la URL publica y ponla en `VITE_ENGINE_URL` de la web.
 
 Costo aprox: web gratis + Railway Hobby ~$5/mes.

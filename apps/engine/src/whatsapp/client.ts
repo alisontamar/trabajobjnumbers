@@ -6,44 +6,56 @@ import makeWASocket, {
 } from 'baileys'
 import type { EstadoConexionWhatsApp } from '@crm/shared'
 import { soloDigitos } from '@crm/shared'
-import { env } from '../env'
 import { logger } from '../logger'
 import { supabase } from '../supabase'
 import { useSupabaseAuthState, limpiarAuth } from './authState'
 
 type Sock = ReturnType<typeof makeWASocket>
 
-let sock: Sock | null = null
-let arrancando = false
-let reintentos = 0
-
-export function getSock(): Sock | null {
-  return sock
+interface Sesion {
+  sock: Sock | null
+  arrancando: boolean
+  reintentos: number
 }
 
-export function whatsappConectado(): boolean {
-  return !!sock?.user
+const sesiones = new Map<string, Sesion>()
+
+function sesionDe(idSucursal: string): Sesion {
+  let s = sesiones.get(idSucursal)
+  if (!s) {
+    s = { sock: null, arrancando: false, reintentos: 0 }
+    sesiones.set(idSucursal, s)
+  }
+  return s
 }
 
-async function setEstado(patch: {
-  estado?: EstadoConexionWhatsApp
-  qr?: string | null
-  numero?: string | null
-}): Promise<void> {
+export function getSock(idSucursal: string): Sock | null {
+  return sesiones.get(idSucursal)?.sock ?? null
+}
+
+export function whatsappConectado(idSucursal: string): boolean {
+  return !!sesiones.get(idSucursal)?.sock?.user
+}
+
+async function setEstado(
+  idSucursal: string,
+  patch: { estado?: EstadoConexionWhatsApp; qr?: string | null; numero?: string | null },
+): Promise<void> {
   const { error } = await supabase
     .from('whatsapp_estado')
-    .upsert({ id: 'default', ...patch, actualizado_en: new Date().toISOString() })
-  if (error) logger.error({ err: error }, 'setEstado')
+    .upsert({ id_sucursal: idSucursal, ...patch, actualizado_en: new Date().toISOString() })
+  if (error) logger.error({ err: error, idSucursal }, 'setEstado')
 }
 
-export async function startSock(): Promise<void> {
-  if (arrancando || sock) return
-  arrancando = true
+export async function startSock(idSucursal: string): Promise<void> {
+  const s = sesionDe(idSucursal)
+  if (s.arrancando || s.sock) return
+  s.arrancando = true
   try {
-    const { state, saveCreds } = await useSupabaseAuthState(env.WA_SESSION_ID)
+    const { state, saveCreds } = await useSupabaseAuthState(idSucursal)
     const { version } = await fetchLatestBaileysVersion()
 
-    sock = makeWASocket({
+    const sock = makeWASocket({
       version,
       auth: {
         creds: state.creds,
@@ -55,6 +67,7 @@ export async function startSock(): Promise<void> {
       markOnlineOnConnect: false,
       syncFullHistory: false,
     })
+    s.sock = sock
 
     sock.ev.on('creds.update', saveCreds)
 
@@ -62,68 +75,86 @@ export async function startSock(): Promise<void> {
       const { connection, lastDisconnect, qr } = u
 
       if (qr) {
-        logger.info('Nuevo QR generado, escanealo desde el panel de WhatsApp')
-        await setEstado({ estado: 'esperando_qr', qr })
+        logger.info({ idSucursal }, 'Nuevo QR generado, escanealo desde el panel de WhatsApp')
+        await setEstado(idSucursal, { estado: 'esperando_qr', qr })
       }
 
       if (connection === 'connecting') {
-        await setEstado({ estado: 'conectando' })
+        await setEstado(idSucursal, { estado: 'conectando' })
       }
 
       if (connection === 'open') {
-        reintentos = 0
-        const numero =
-          sock?.user?.id?.split(':')[0]?.split('@')[0] ?? null
-        await setEstado({ estado: 'conectado', qr: null, numero })
-        logger.info({ numero }, 'WhatsApp conectado')
+        s.reintentos = 0
+        const numero = sock.user?.id?.split(':')[0]?.split('@')[0] ?? null
+        await setEstado(idSucursal, { estado: 'conectado', qr: null, numero })
+        logger.info({ idSucursal, numero }, 'WhatsApp conectado')
       }
 
       if (connection === 'close') {
         const code = (lastDisconnect?.error as any)?.output?.statusCode
         const cerradaSesion = code === DisconnectReason.loggedOut
-        sock = null
-        await setEstado({ estado: 'desconectado', qr: null })
+        s.sock = null
+        await setEstado(idSucursal, { estado: 'desconectado', qr: null })
 
         if (cerradaSesion) {
-          logger.warn('Sesion cerrada (logout). Se limpian credenciales; hace falta re-escanear el QR.')
-          await limpiarAuth(env.WA_SESSION_ID)
+          logger.warn({ idSucursal }, 'Sesion cerrada (logout). Se limpian credenciales; hace falta re-escanear el QR.')
+          await limpiarAuth(idSucursal)
           return
         }
 
-        reintentos++
-        const espera = Math.min(30, 5 * reintentos) * 1000
-        logger.warn({ code, reintentos, espera }, 'Conexion cerrada, reintentando')
+        s.reintentos++
+        const espera = Math.min(30, 5 * s.reintentos) * 1000
+        logger.warn({ idSucursal, code, reintentos: s.reintentos, espera }, 'Conexion cerrada, reintentando')
         setTimeout(() => {
-          startSock().catch((e) => logger.error({ err: e }, 'reintento startSock'))
+          startSock(idSucursal).catch((e) => logger.error({ err: e, idSucursal }, 'reintento startSock'))
         }, espera)
       }
     })
   } finally {
-    arrancando = false
+    s.arrancando = false
   }
 }
 
-/** Reinicia la sesion desde cero (borra credenciales y vuelve a pedir QR). */
-export async function reiniciarSesion(): Promise<void> {
+/** Reinicia la sesion de una sucursal desde cero (borra credenciales y vuelve a pedir QR). */
+export async function reiniciarSesion(idSucursal: string): Promise<void> {
+  const s = sesionDe(idSucursal)
   try {
-    await sock?.logout()
+    await s.sock?.logout()
   } catch {
     /* ignorar */
   }
-  sock = null
-  await limpiarAuth(env.WA_SESSION_ID)
-  await setEstado({ estado: 'desconectado', qr: null, numero: null })
-  await startSock()
+  s.sock = null
+  await limpiarAuth(idSucursal)
+  await setEstado(idSucursal, { estado: 'desconectado', qr: null, numero: null })
+  await startSock(idSucursal)
+}
+
+/**
+ * Pide un codigo de 8 caracteres para vincular sin escanear QR (WhatsApp ->
+ * Dispositivos vinculados -> Vincular con numero de telefono). Util cuando el
+ * celular con el numero lo tiene otra persona: se le dicta el codigo.
+ */
+export async function solicitarCodigo(idSucursal: string, telefono: string): Promise<string> {
+  await startSock(idSucursal)
+  const sock = getSock(idSucursal)
+  if (!sock) throw new Error('No se pudo iniciar la sesion de WhatsApp')
+  if (sock.authState.creds.registered) throw new Error('Esta sucursal ya esta vinculada')
+
+  const numero = soloDigitos(telefono)
+  if (!numero) throw new Error('Numero invalido')
+  return sock.requestPairingCode(numero)
 }
 
 /** Devuelve el JID si el numero tiene WhatsApp, o null si no. */
-export async function verificarNumero(e164: string): Promise<string | null> {
+export async function verificarNumero(idSucursal: string, e164: string): Promise<string | null> {
+  const sock = getSock(idSucursal)
   if (!sock) return null
-  const [res] = await sock.onWhatsApp(soloDigitos(e164))
+  const [res] = (await sock.onWhatsApp(soloDigitos(e164))) ?? []
   return res?.exists ? res.jid : null
 }
 
-export async function enviarTexto(jid: string, texto: string): Promise<void> {
+export async function enviarTexto(idSucursal: string, jid: string, texto: string): Promise<void> {
+  const sock = getSock(idSucursal)
   if (!sock) throw new Error('El socket de WhatsApp no esta conectado')
   await sock.presenceSubscribe(jid).catch(() => {})
   await sock.sendPresenceUpdate('composing', jid).catch(() => {})

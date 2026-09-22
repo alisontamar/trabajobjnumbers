@@ -6,9 +6,7 @@ import { enviarTexto, verificarNumero, whatsappConectado } from '../whatsapp/cli
 
 const MAX_INTENTOS = 3
 
-let corriendo = false
-let timer: NodeJS.Timeout | null = null
-let enviadosDesdePausaLarga = 0
+const activos = new Map<string, boolean>()
 
 function randInt(min: number, max: number): number {
   return Math.floor(min + Math.random() * (max - min + 1))
@@ -23,28 +21,25 @@ function hoyISO(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-function agendar(ms: number): void {
-  timer = setTimeout(tick, ms)
-}
-
-async function getConfig(): Promise<ConfigEnvio | null> {
+async function getConfig(idSucursal: string): Promise<ConfigEnvio | null> {
   const { data, error } = await supabase
     .from('config_envio')
     .select('*')
-    .eq('id', 'default')
+    .eq('id_sucursal', idSucursal)
     .maybeSingle()
   if (error) {
-    logger.error({ err: error }, 'getConfig')
+    logger.error({ err: error, idSucursal }, 'getConfig')
     return null
   }
   return data as ConfigEnvio | null
 }
 
-/** Marca como 'finalizada' toda campana en curso que ya no tiene pendientes. */
-async function finalizarCampanasVacias(): Promise<void> {
+/** Marca como 'finalizada' toda campana en curso de la sucursal que ya no tiene pendientes. */
+async function finalizarCampanasVacias(idSucursal: string): Promise<void> {
   const { data: enCurso } = await supabase
     .from('campanas')
     .select('id')
+    .eq('id_sucursal', idSucursal)
     .eq('estado', 'en_curso')
 
   for (const c of enCurso ?? []) {
@@ -55,28 +50,32 @@ async function finalizarCampanasVacias(): Promise<void> {
       .eq('estado', 'pendiente')
     if ((count ?? 0) === 0) {
       await supabase.from('campanas').update({ estado: 'finalizada' }).eq('id', c.id)
-      logger.info({ campana: c.id }, 'Campana finalizada')
+      logger.info({ campana: c.id, idSucursal }, 'Campana finalizada')
     }
   }
 }
 
-/** Toma el siguiente destinatario pendiente de cualquier campana en curso. */
-async function tomarSiguiente() {
+/** Toma el siguiente destinatario pendiente de campanas en curso de esta sucursal. */
+async function tomarSiguiente(idSucursal: string) {
   const { data, error } = await supabase
     .from('campana_destinatarios')
     .select('*, campanas!inner(id, estado, plantilla_texto, id_sucursal, sucursales(nombre))')
     .eq('estado', 'pendiente')
     .eq('campanas.estado', 'en_curso')
+    .eq('campanas.id_sucursal', idSucursal)
     .order('creado_en', { ascending: true })
     .limit(1)
   if (error) {
-    logger.error({ err: error }, 'tomarSiguiente')
+    logger.error({ err: error, idSucursal }, 'tomarSiguiente')
     return null
   }
   return data?.[0] ?? null
 }
 
-async function procesar(dest: any): Promise<'enviado' | 'omitido' | 'sin_whatsapp' | 'fallido' | 'reintentar'> {
+async function procesar(
+  idSucursal: string,
+  dest: any,
+): Promise<'enviado' | 'omitido' | 'sin_whatsapp' | 'fallido' | 'reintentar'> {
   const campana = dest.campanas
   const { data: cliente } = await supabase
     .from('clientes')
@@ -98,7 +97,7 @@ async function procesar(dest: any): Promise<'enviado' | 'omitido' | 'sin_whatsap
     return 'omitido'
   }
 
-  const jid = await verificarNumero(dest.celular_snapshot)
+  const jid = await verificarNumero(idSucursal, dest.celular_snapshot)
   if (!jid) {
     await supabase
       .from('campana_destinatarios')
@@ -113,7 +112,7 @@ async function procesar(dest: any): Promise<'enviado' | 'omitido' | 'sin_whatsap
   })
 
   try {
-    await enviarTexto(jid, texto)
+    await enviarTexto(idSucursal, jid, texto)
     await supabase
       .from('campana_destinatarios')
       .update({
@@ -135,22 +134,26 @@ async function procesar(dest: any): Promise<'enviado' | 'omitido' | 'sin_whatsap
         error: String(e?.message ?? e).slice(0, 500),
       })
       .eq('id', dest.id)
-    logger.warn({ dest: dest.id, intento, err: e?.message }, 'fallo envio')
+    logger.warn({ dest: dest.id, idSucursal, intento, err: e?.message }, 'fallo envio')
     return agotado ? 'fallido' : 'reintentar'
   }
 }
 
-async function tick(): Promise<void> {
-  try {
-    if (!whatsappConectado()) return agendar(15_000)
+async function tick(idSucursal: string): Promise<void> {
+  const agendar = (ms: number) => {
+    if (activos.get(idSucursal)) setTimeout(() => tick(idSucursal), ms)
+  }
 
-    const cfg = await getConfig()
+  try {
+    if (!whatsappConectado(idSucursal)) return agendar(15_000)
+
+    const cfg = await getConfig(idSucursal)
     if (!cfg || !cfg.activo) return agendar(30_000)
 
     const hora = horaLocal()
     if (hora < cfg.hora_inicio || hora >= cfg.hora_fin) return agendar(60_000)
 
-    // Contador diario
+    // Contador diario (por sucursal)
     const hoy = hoyISO()
     let contador = cfg.contador_hoy
     if (cfg.contador_fecha !== hoy) {
@@ -158,19 +161,19 @@ async function tick(): Promise<void> {
       await supabase
         .from('config_envio')
         .update({ contador_fecha: hoy, contador_hoy: 0 })
-        .eq('id', 'default')
+        .eq('id_sucursal', idSucursal)
     }
     if (contador >= cfg.tope_diario) {
-      logger.info({ contador, tope: cfg.tope_diario }, 'Tope diario alcanzado')
+      logger.info({ idSucursal, contador, tope: cfg.tope_diario }, 'Tope diario alcanzado')
       return agendar(5 * 60_000)
     }
 
-    await finalizarCampanasVacias()
+    await finalizarCampanasVacias(idSucursal)
 
-    const dest = await tomarSiguiente()
+    const dest = await tomarSiguiente(idSucursal)
     if (!dest) return agendar(20_000)
 
-    const resultado = await procesar(dest)
+    const resultado = await procesar(idSucursal, dest)
 
     // Solo un envio real cuenta para el tope y las pausas
     let delay = randInt(cfg.delay_min_seg, cfg.delay_max_seg) * 1000
@@ -178,34 +181,33 @@ async function tick(): Promise<void> {
       await supabase
         .from('config_envio')
         .update({ contador_hoy: contador + 1, contador_fecha: hoy })
-        .eq('id', 'default')
-      enviadosDesdePausaLarga++
-      if (cfg.pausa_cada > 0 && enviadosDesdePausaLarga >= cfg.pausa_cada) {
-        enviadosDesdePausaLarga = 0
+        .eq('id_sucursal', idSucursal)
+      const pausadasHoy = (contador + 1) % Math.max(cfg.pausa_cada, 1)
+      if (cfg.pausa_cada > 0 && pausadasHoy === 0) {
         delay += cfg.pausa_larga_seg * 1000
-        logger.info({ seg: cfg.pausa_larga_seg }, 'Pausa larga entre lotes')
+        logger.info({ idSucursal, seg: cfg.pausa_larga_seg }, 'Pausa larga entre lotes')
       }
     } else {
       // omitido / sin_whatsapp / reintentar: pasar al siguiente mas rapido
       delay = randInt(5, 12) * 1000
     }
 
-    logger.info({ dest: dest.id, resultado, proximoEnMs: delay }, 'destinatario procesado')
+    logger.info({ idSucursal, dest: dest.id, resultado, proximoEnMs: delay }, 'destinatario procesado')
     agendar(delay)
   } catch (e) {
-    logger.error({ err: e }, 'tick')
+    logger.error({ err: e, idSucursal }, 'tick')
     agendar(30_000)
   }
 }
 
-export function startWorker(): void {
-  if (corriendo) return
-  corriendo = true
-  logger.info('Worker de difusion iniciado')
-  agendar(3_000)
+/** Arranca el worker de difusion de una sucursal (una cola serial por numero). */
+export function startWorker(idSucursal: string): void {
+  if (activos.get(idSucursal)) return
+  activos.set(idSucursal, true)
+  logger.info({ idSucursal }, 'Worker de difusion iniciado')
+  setTimeout(() => tick(idSucursal), 3_000)
 }
 
-export function stopWorker(): void {
-  if (timer) clearTimeout(timer)
-  corriendo = false
+export function stopWorker(idSucursal: string): void {
+  activos.set(idSucursal, false)
 }

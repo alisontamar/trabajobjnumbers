@@ -23,6 +23,7 @@ export type EstadoConexionWhatsApp =
 export interface Sucursal {
   id: string
   nombre: string
+  whatsapp_numero: string | null
   creado_en: string
 }
 
@@ -77,7 +78,7 @@ export interface CampanaDestinatario {
 }
 
 export interface ConfigEnvio {
-  id: string
+  id_sucursal: string
   tope_diario: number
   delay_min_seg: number
   delay_max_seg: number
@@ -92,7 +93,7 @@ export interface ConfigEnvio {
 }
 
 export interface WhatsAppEstado {
-  id: string
+  id_sucursal: string
   estado: EstadoConexionWhatsApp
   qr: string | null
   numero: string | null

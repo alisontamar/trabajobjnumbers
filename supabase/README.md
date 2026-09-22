@@ -1,27 +1,32 @@
 # Supabase
 
-Ejecutar en orden desde el **SQL Editor** del proyecto:
+Ejecutar **una sola vez** en el **SQL Editor** del proyecto:
 
-1. `migrations/0001_init.sql` — tablas, indices y funciones helper de RLS.
-2. `migrations/0002_rls.sql` — habilita RLS y crea las politicas.
-3. `seed.sql` — sucursales (Central, Santa Cruz, Prado) + filas unicas de
-   `whatsapp_estado` y `config_envio`.
+1. `schema.sql` — tablas, indices, funciones helper, RLS y datos iniciales
+   (sucursales Central / Santa Cruz / Prado, cada una con su numero de
+   WhatsApp, mas las filas de `whatsapp_estado` y `config_envio` por sucursal).
 
 Luego crear el primer usuario en **Authentication → Users** e insertar su fila en
-`public.perfiles` con `rol = 'admin'` (ver comentario al final de `seed.sql`).
+`public.perfiles` con `rol = 'admin'` (ver comentario al final de `schema.sql`).
+
+## Arquitectura: 1 numero de WhatsApp por sucursal
+
+Cada sucursal tiene su propia sesion de Baileys, su propio QR y su propio
+tope diario / ventana horaria. El engine levanta una conexion y un worker de
+cola por cada fila de `sucursales`.
 
 ## Tablas
 
 | Tabla | Quien escribe | Notas |
 |---|---|---|
-| `sucursales` | admin | catalogo |
+| `sucursales` | admin | catalogo + `whatsapp_numero` de referencia |
 | `perfiles` | admin | rol + sucursal por usuario (1:1 con `auth.users`) |
 | `clientes` | cajero/supervisor (su sucursal), admin | `celular_e164` unico |
 | `campanas` | supervisor (su sucursal), admin | `segmento` jsonb |
 | `campana_destinatarios` | **engine** (service_role) | la cola de envio |
-| `whatsapp_estado` | engine | 1 fila `id='default'`, expone el QR |
-| `whatsapp_auth` | engine | credenciales Baileys, sin acceso via API publica |
-| `config_envio` | admin | tope diario, delays, ventana horaria |
+| `whatsapp_estado` | engine | 1 fila por `id_sucursal`, expone el QR |
+| `whatsapp_auth` | engine | credenciales Baileys por sucursal, sin acceso via API publica |
+| `config_envio` | admin | 1 fila por `id_sucursal`: tope diario, delays, ventana horaria |
 | `opt_outs` | engine | bajas |
 | `auditoria` | engine + web | acciones sensibles |
 

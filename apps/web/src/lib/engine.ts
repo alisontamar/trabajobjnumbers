@@ -24,6 +24,18 @@ export const engine = {
   dispararCampana: (id: string) => call(`/campanas/${id}/disparar`, { method: 'POST' }),
   pausarCampana: (id: string) => call(`/campanas/${id}/pausar`, { method: 'POST' }),
   reanudarCampana: (id: string) => call(`/campanas/${id}/reanudar`, { method: 'POST' }),
-  reconectarWhatsApp: () => call('/whatsapp/reconectar', { method: 'POST' }),
-  reiniciarWhatsApp: () => call('/whatsapp/reiniciar', { method: 'POST' }),
+  reconectarWhatsApp: (idSucursal: string) =>
+    call(`/whatsapp/${idSucursal}/reconectar`, { method: 'POST' }),
+  reiniciarWhatsApp: (idSucursal: string) =>
+    call(`/whatsapp/${idSucursal}/reiniciar`, { method: 'POST' }),
+  solicitarCodigoWhatsApp: (idSucursal: string, telefono: string) =>
+    call(`/whatsapp/${idSucursal}/codigo`, { method: 'POST', body: JSON.stringify({ telefono }) }),
+  crearUsuario: (datos: {
+    email: string
+    password: string
+    nombre: string
+    rol: string
+    id_sucursal: string | null
+  }) => call('/usuarios', { method: 'POST', body: JSON.stringify(datos) }),
+  listarUsuarios: () => call('/usuarios'),
 }

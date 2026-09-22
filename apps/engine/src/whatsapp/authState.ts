@@ -12,23 +12,22 @@ const TABLE = 'whatsapp_auth'
 
 /**
  * Estado de autenticacion de Baileys persistido en la tabla whatsapp_auth
- * de Supabase (clave/valor). Equivale a useMultiFileAuthState pero contra
- * Postgres, para que la sesion sobreviva a los redeploy del engine.
+ * de Supabase (una fila por sucursal + clave). Equivale a useMultiFileAuthState
+ * pero contra Postgres, para que la sesion sobreviva a los redeploy del engine.
  */
-export async function useSupabaseAuthState(sessionId: string): Promise<{
+export async function useSupabaseAuthState(idSucursal: string): Promise<{
   state: AuthenticationState
   saveCreds: () => Promise<void>
 }> {
-  const prefix = `${sessionId}:`
-
   async function read(key: string): Promise<any | null> {
     const { data, error } = await supabase
       .from(TABLE)
       .select('value')
-      .eq('key', prefix + key)
+      .eq('id_sucursal', idSucursal)
+      .eq('key', key)
       .maybeSingle()
     if (error) {
-      logger.error({ err: error, key }, 'authState.read')
+      logger.error({ err: error, idSucursal, key }, 'authState.read')
       return null
     }
     if (!data) return null
@@ -38,16 +37,21 @@ export async function useSupabaseAuthState(sessionId: string): Promise<{
   async function write(key: string, value: unknown): Promise<void> {
     const payload = JSON.parse(JSON.stringify(value, BufferJSON.replacer))
     const { error } = await supabase.from(TABLE).upsert({
-      key: prefix + key,
+      id_sucursal: idSucursal,
+      key,
       value: payload,
       actualizado_en: new Date().toISOString(),
     })
-    if (error) logger.error({ err: error, key }, 'authState.write')
+    if (error) logger.error({ err: error, idSucursal, key }, 'authState.write')
   }
 
   async function remove(key: string): Promise<void> {
-    const { error } = await supabase.from(TABLE).delete().eq('key', prefix + key)
-    if (error) logger.error({ err: error, key }, 'authState.remove')
+    const { error } = await supabase
+      .from(TABLE)
+      .delete()
+      .eq('id_sucursal', idSucursal)
+      .eq('key', key)
+    if (error) logger.error({ err: error, idSucursal, key }, 'authState.remove')
   }
 
   const creds: AuthenticationCreds = (await read('creds')) || initAuthCreds()
@@ -89,11 +93,8 @@ export async function useSupabaseAuthState(sessionId: string): Promise<{
   }
 }
 
-/** Borra todas las credenciales de una sesion (equivale a "cerrar sesion"). */
-export async function limpiarAuth(sessionId: string): Promise<void> {
-  const { error } = await supabase
-    .from(TABLE)
-    .delete()
-    .like('key', `${sessionId}:%`)
-  if (error) logger.error({ err: error }, 'limpiarAuth')
+/** Borra todas las credenciales de una sucursal (equivale a "cerrar sesion"). */
+export async function limpiarAuth(idSucursal: string): Promise<void> {
+  const { error } = await supabase.from(TABLE).delete().eq('id_sucursal', idSucursal)
+  if (error) logger.error({ err: error, idSucursal }, 'limpiarAuth')
 }

@@ -28,7 +28,8 @@ export function Layout() {
           {link('/caja', 'Caja')}
           {isSup && link('/admin', 'Panel')}
           {isSup && link('/admin/campanas', 'Campanas')}
-          {isAdmin && link('/admin/whatsapp', 'WhatsApp')}
+          {isSup && link('/admin/whatsapp', 'WhatsApp')}
+          {isSup && link('/admin/usuarios', 'Usuarios')}
           <div className="ml-auto flex items-center gap-3 text-sm text-slate-500">
             <span className="hidden sm:inline">
               {session?.user.email} · {perfil?.rol ?? 'sin rol'}

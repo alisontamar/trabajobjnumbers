@@ -12,7 +12,6 @@ export const env = {
   SUPABASE_URL: requerido('SUPABASE_URL'),
   SUPABASE_SERVICE_ROLE_KEY: requerido('SUPABASE_SERVICE_ROLE_KEY'),
   PORT: Number(process.env.PORT ?? 8080),
-  WA_SESSION_ID: process.env.WA_SESSION_ID?.trim() || 'default',
   HORARIO_TZ_OFFSET: Number(process.env.HORARIO_TZ_OFFSET ?? -4),
   ADMIN_ORIGINS: (process.env.ADMIN_ORIGINS ?? 'http://localhost:5173')
     .split(',')
