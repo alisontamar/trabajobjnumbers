@@ -192,26 +192,28 @@ export default function Usuarios() {
         {cargando ? (
           <p className="text-sm text-slate-500">Cargando…</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-slate-500 border-b">
-                <th className="py-2">Nombre</th>
-                <th>Email</th>
-                <th>Rol</th>
-                <th>Sucursal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {usuarios.map((u) => (
-                <tr key={u.user_id} className="border-b last:border-0">
-                  <td className="py-2">{u.nombre ?? '—'}</td>
-                  <td>{u.email ?? '—'}</td>
-                  <td>{etiquetaRol[u.rol]}</td>
-                  <td>{u.id_sucursal ? nombreSucursal(u.id_sucursal) : '—'}</td>
+          <div className="-mx-5 px-5 overflow-x-auto">
+            <table className="w-full text-sm min-w-[480px]">
+              <thead>
+                <tr className="text-left text-slate-500 border-b">
+                  <th className="py-2">Nombre</th>
+                  <th>Email</th>
+                  <th>Rol</th>
+                  <th>Sucursal</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {usuarios.map((u) => (
+                  <tr key={u.user_id} className="border-b last:border-0">
+                    <td className="py-2">{u.nombre ?? '—'}</td>
+                    <td>{u.email ?? '—'}</td>
+                    <td>{etiquetaRol[u.rol]}</td>
+                    <td>{u.id_sucursal ? nombreSucursal(u.id_sucursal) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </div>

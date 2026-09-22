@@ -100,7 +100,7 @@ function PanelSucursal({ sucursal }: { sucursal: Sucursal }) {
 
         {estado?.estado !== 'conectado' && (
           <div className="mt-4">
-            <div className="flex gap-1 text-xs">
+            <div className="flex flex-wrap gap-1 text-xs">
               <button
                 onClick={() => setModoVinculo('qr')}
                 className={`px-2 py-1 rounded-md border ${
@@ -175,7 +175,7 @@ function PanelSucursal({ sucursal }: { sucursal: Sucursal }) {
           </div>
         )}
 
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex flex-wrap gap-2">
           <button
             onClick={async () => {
               setMsg(null)
