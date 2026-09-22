@@ -1,6 +1,6 @@
 # Imagen para el engine. Railway tambien puede construir sin Dockerfile
 # (Nixpacks detecta Node), pero esto deja el build reproducible.
-FROM node:20-slim
+FROM node:22-slim
 
 WORKDIR /app
 
