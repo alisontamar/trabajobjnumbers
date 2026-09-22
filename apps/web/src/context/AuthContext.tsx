@@ -30,9 +30,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [perfil, setPerfil] = useState<Perfil | null>(null)
   const [loading, setLoading] = useState(true)
+  const [sesionLista, setSesionLista] = useState(false)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session)
+      setSesionLista(true)
+    })
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
@@ -40,6 +44,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
+    // Espera a que se resuelva la sesion guardada (localStorage) antes de
+    // decidir que no hay sesion; si no, un refresh manda al login de golpe.
+    if (!sesionLista) return
     if (!session) {
       setPerfil(null)
       setLoading(false)
@@ -55,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setPerfil((data as Perfil | null) ?? null)
         setLoading(false)
       })
-  }, [session])
+  }, [session, sesionLista])
 
   const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
