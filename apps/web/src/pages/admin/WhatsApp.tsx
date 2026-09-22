@@ -104,7 +104,7 @@ function PanelSucursal({ sucursal }: { sucursal: Sucursal }) {
               <button
                 onClick={() => setModoVinculo('qr')}
                 className={`px-2 py-1 rounded-md border ${
-                  modoVinculo === 'qr' ? 'bg-slate-900 text-white border-slate-900' : 'text-slate-600'
+                  modoVinculo === 'qr' ? 'bg-brand-800 text-white border-brand-800' : 'text-slate-600'
                 }`}
               >
                 Escanear QR
@@ -112,7 +112,7 @@ function PanelSucursal({ sucursal }: { sucursal: Sucursal }) {
               <button
                 onClick={() => setModoVinculo('codigo')}
                 className={`px-2 py-1 rounded-md border ${
-                  modoVinculo === 'codigo' ? 'bg-slate-900 text-white border-slate-900' : 'text-slate-600'
+                  modoVinculo === 'codigo' ? 'bg-brand-800 text-white border-brand-800' : 'text-slate-600'
                 }`}
               >
                 Vincular con código
@@ -256,7 +256,7 @@ function PanelSucursal({ sucursal }: { sucursal: Sucursal }) {
           <button
             onClick={() => void guardarCfg()}
             disabled={guardando}
-            className="mt-4 bg-slate-900 text-white rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
+            className="mt-4 bg-brand-800 text-white rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             {guardando ? 'Guardando…' : 'Guardar configuracion'}
           </button>

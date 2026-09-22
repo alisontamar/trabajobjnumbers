@@ -154,7 +154,7 @@ export default function Caja() {
           <button
             type="submit"
             disabled={guardando}
-            className="w-full bg-slate-900 text-white rounded-md py-2 text-sm font-medium disabled:opacity-50"
+            className="w-full bg-brand-800 text-white rounded-md py-2 text-sm font-medium disabled:opacity-50"
           >
             {guardando ? 'Guardando…' : 'Guardar'}
           </button>

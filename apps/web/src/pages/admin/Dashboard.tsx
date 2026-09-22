@@ -65,7 +65,7 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-3">
         <Card label="Clientes totales" value={s.clientes} />
-        <Card label="Campanas en curso" value={s.campanasEnCurso} />
+        <Card label="Campañas en curso" value={s.campanasEnCurso} />
         <Card label="Mensajes enviados hoy" value={s.enviadosHoy} />
       </div>
 

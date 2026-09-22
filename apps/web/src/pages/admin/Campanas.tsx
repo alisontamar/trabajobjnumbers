@@ -68,12 +68,12 @@ export default function Campanas() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-slate-900">Campanas</h2>
+        <h2 className="font-semibold text-slate-900">Campañas</h2>
         <Link
           to="/admin/campanas/nueva"
-          className="bg-slate-900 text-white rounded-md px-3 py-2 text-sm font-medium"
+          className="bg-brand-800 text-white rounded-md px-3 py-2 text-sm font-medium"
         >
-          Nueva campana
+          Nueva campaña
         </Link>
       </div>
 
@@ -127,7 +127,7 @@ export default function Campanas() {
           </div>
         ))}
         {filas.length === 0 && (
-          <p className="p-4 text-sm text-slate-400">No hay campanas todavia.</p>
+          <p className="p-4 text-sm text-slate-400">No hay campañas todavía.</p>
         )}
       </div>
     </div>

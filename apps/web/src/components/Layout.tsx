@@ -12,7 +12,7 @@ export function Layout() {
       to={to}
       className={`px-3 py-2 rounded-md text-sm font-medium transition ${
         loc.pathname === to
-          ? 'bg-slate-900 text-white'
+          ? 'bg-brand-800 text-white'
           : 'text-slate-600 hover:bg-slate-100'
       }`}
     >
@@ -24,10 +24,11 @@ export function Layout() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b bg-white">
         <div className="max-w-5xl mx-auto flex items-center gap-1 px-4 h-14">
-          <span className="font-semibold mr-3">CRM Difusion</span>
+          <img src="/logo-bj.png" alt="BJ Promociones" className="h-9 w-auto mr-2" />
+          <span className="font-semibold mr-3">BJ Promociones</span>
           {link('/caja', 'Caja')}
           {isSup && link('/admin', 'Panel')}
-          {isSup && link('/admin/campanas', 'Campanas')}
+          {isSup && link('/admin/campanas', 'Campañas')}
           {isSup && link('/admin/whatsapp', 'WhatsApp')}
           {isSup && link('/admin/usuarios', 'Usuarios')}
           <div className="ml-auto flex items-center gap-3 text-sm text-slate-500">

@@ -178,7 +178,7 @@ export default function Usuarios() {
           <button
             type="submit"
             disabled={guardando}
-            className="sm:col-span-2 bg-slate-900 text-white rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50 w-fit"
+            className="sm:col-span-2 bg-brand-800 text-white rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50 w-fit"
           >
             {guardando ? 'Creando…' : 'Crear cuenta'}
           </button>

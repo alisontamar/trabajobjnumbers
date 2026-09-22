@@ -30,8 +30,9 @@ export default function Login() {
         onSubmit={onSubmit}
         className="w-full max-w-sm bg-white border rounded-xl p-6 space-y-4"
       >
-        <div>
-          <h1 className="text-lg font-semibold text-slate-900">CRM Difusion</h1>
+        <div className="flex flex-col items-center text-center">
+          <img src="/logo-bj.png" alt="BJ Promociones" className="h-16 w-auto mb-2" />
+          <h1 className="text-lg font-semibold text-slate-900">BJ Promociones</h1>
           <p className="text-sm text-slate-500">Inicia sesion para continuar</p>
         </div>
 
@@ -63,7 +64,7 @@ export default function Login() {
         <button
           type="submit"
           disabled={cargando}
-          className="w-full bg-slate-900 text-white rounded-md py-2 text-sm font-medium disabled:opacity-50"
+          className="w-full bg-brand-800 text-white rounded-md py-2 text-sm font-medium disabled:opacity-50 hover:bg-brand-900"
         >
           {cargando ? 'Entrando…' : 'Entrar'}
         </button>

@@ -13,6 +13,7 @@ export default function CampanaNueva() {
   const [nombre, setNombre] = useState('')
   const [idSucursal, setIdSucursal] = useState('')
   const [plantilla, setPlantilla] = useState('Hola {nombre}, tenemos una promo para vos 🎉')
+  const [enviarATodos, setEnviarATodos] = useState(true)
   const [creadosDesde, setCreadosDesde] = useState('')
   const [creadosHasta, setCreadosHasta] = useState('')
   const [estimado, setEstimado] = useState<number | null>(null)
@@ -32,6 +33,7 @@ export default function CampanaNueva() {
   }, [esAdmin, perfil?.id_sucursal])
 
   function segmento(): SegmentoCampana {
+    if (enviarATodos) return {}
     const s: SegmentoCampana = {}
     if (creadosDesde) s.creados_desde = new Date(creadosDesde).toISOString()
     if (creadosHasta) s.creados_hasta = new Date(creadosHasta).toISOString()
@@ -87,7 +89,7 @@ export default function CampanaNueva() {
 
   return (
     <form onSubmit={onSubmit} className="max-w-xl space-y-4">
-      <h2 className="font-semibold text-slate-900">Nueva campana</h2>
+      <h2 className="font-semibold text-slate-900">Nueva campaña</h2>
 
       <label className="block text-sm">
         <span className="text-slate-600">Nombre interno</span>
@@ -116,26 +118,39 @@ export default function CampanaNueva() {
         </select>
       </label>
 
-      <div className="grid grid-cols-2 gap-3">
-        <label className="block text-sm">
-          <span className="text-slate-600">Registrados desde</span>
-          <input
-            type="date"
-            value={creadosDesde}
-            onChange={(e) => setCreadosDesde(e.target.value)}
-            className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="text-slate-600">hasta</span>
-          <input
-            type="date"
-            value={creadosHasta}
-            onChange={(e) => setCreadosHasta(e.target.value)}
-            className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
-          />
-        </label>
-      </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={enviarATodos}
+          onChange={(e) => setEnviarATodos(e.target.checked)}
+        />
+        <span className="text-slate-600">
+          Enviar a todos los destinatarios registrados de la sucursal
+        </span>
+      </label>
+
+      {!enviarATodos && (
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block text-sm">
+            <span className="text-slate-600">Registrados desde</span>
+            <input
+              type="date"
+              value={creadosDesde}
+              onChange={(e) => setCreadosDesde(e.target.value)}
+              className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="text-slate-600">hasta</span>
+            <input
+              type="date"
+              value={creadosHasta}
+              onChange={(e) => setCreadosHasta(e.target.value)}
+              className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
+            />
+          </label>
+        </div>
+      )}
 
       <label className="block text-sm">
         <span className="text-slate-600">
@@ -178,7 +193,7 @@ export default function CampanaNueva() {
       <button
         type="submit"
         disabled={guardando}
-        className="bg-slate-900 text-white rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
+        className="bg-brand-800 text-white rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
       >
         {guardando ? 'Guardando…' : 'Guardar borrador'}
       </button>
