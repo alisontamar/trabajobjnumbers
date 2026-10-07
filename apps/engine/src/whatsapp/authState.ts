@@ -11,7 +11,7 @@ import { logger } from '../logger'
 const TABLE = 'whatsapp_auth'
 
 /**
- * Estado de autenticacion de Baileys persistido en la tabla whatsapp_auth
+ * Estado de autenticacion de Baileys persistido la tabla whatsapp_auth
  * de Supabase (una fila por sucursal + clave). Equivale a useMultiFileAuthState
  * pero contra Postgres, para que la sesion sobreviva a los redeploy del engine.
  */
