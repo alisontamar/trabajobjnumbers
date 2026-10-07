@@ -2,7 +2,7 @@ import { renderPlantilla, type ConfigEnvio } from '@crm/shared'
 import { env } from '../env'
 import { logger } from '../logger'
 import { supabase } from '../supabase'
-import { enviarTexto, verificarNumero, whatsappConectado } from '../whatsapp/client'
+import { enviarImagen, enviarTexto, verificarNumero, whatsappConectado } from '../whatsapp/client'
 
 const MAX_INTENTOS = 3
 
@@ -59,7 +59,7 @@ async function finalizarCampanasVacias(idSucursal: string): Promise<void> {
 async function tomarSiguiente(idSucursal: string) {
   const { data, error } = await supabase
     .from('campana_destinatarios')
-    .select('*, campanas!inner(id, estado, plantilla_texto, id_sucursal, sucursales(nombre))')
+    .select('*, campanas!inner(id, estado, plantilla_texto, imagen_url, id_sucursal, sucursales(nombre))')
     .eq('estado', 'pendiente')
     .eq('campanas.estado', 'en_curso')
     .eq('campanas.id_sucursal', idSucursal)
@@ -112,7 +112,11 @@ async function procesar(
   })
 
   try {
-    await enviarTexto(idSucursal, jid, texto)
+    if (campana.imagen_url) {
+      await enviarImagen(idSucursal, jid, campana.imagen_url, texto)
+    } else {
+      await enviarTexto(idSucursal, jid, texto)
+    }
     await supabase
       .from('campana_destinatarios')
       .update({

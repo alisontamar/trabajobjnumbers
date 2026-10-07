@@ -11,6 +11,7 @@
     "dev:web": "npm run dev -w @crm/web",
     "dev:engine": "npm run dev -w @crm/engine",
     "build:web": "npm run build -w @crm/web",
+    "sync:clientes": "node scripts/sync-clientes-siesam.mjs",
     "typecheck": "npm run typecheck -w @crm/web && npm run typecheck -w @crm/engine"
   },
   "engines": {

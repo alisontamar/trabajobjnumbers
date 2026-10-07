@@ -162,3 +162,23 @@ export async function enviarTexto(idSucursal: string, jid: string, texto: string
   await sock.sendPresenceUpdate('paused', jid).catch(() => {})
   await sock.sendMessage(jid, { text: texto })
 }
+
+export async function enviarImagen(
+  idSucursal: string,
+  jid: string,
+  urlImagen: string,
+  texto: string,
+): Promise<void> {
+  const sock = getSock(idSucursal)
+  if (!sock) throw new Error('El socket de WhatsApp no esta conectado')
+  await sock.presenceSubscribe(jid).catch(() => {})
+  await sock.sendPresenceUpdate('composing', jid).catch(() => {})
+  await new Promise((r) => setTimeout(r, 1200 + Math.random() * 1800))
+  await sock.sendPresenceUpdate('paused', jid).catch(() => {})
+  if (texto.length <= 1024) {
+    await sock.sendMessage(jid, { image: { url: urlImagen }, caption: texto })
+  } else {
+    await sock.sendMessage(jid, { image: { url: urlImagen } })
+    await sock.sendMessage(jid, { text: texto })
+  }
+}

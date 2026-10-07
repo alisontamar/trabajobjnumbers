@@ -58,6 +58,7 @@ export interface Campana {
   id_sucursal: string
   nombre: string
   plantilla_texto: string
+  imagen_url: string | null
   segmento: SegmentoCampana
   estado: EstadoCampana
   programada_para: string | null

@@ -10,3 +10,5 @@ npm-debug.log*
 .railway
 auth_info_baileys/
 *.tsbuildinfo
+supabase/schema.sql
+supabase/README.md

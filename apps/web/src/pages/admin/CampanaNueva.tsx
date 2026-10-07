@@ -13,6 +13,7 @@ export default function CampanaNueva() {
   const [nombre, setNombre] = useState('')
   const [idSucursal, setIdSucursal] = useState('')
   const [plantilla, setPlantilla] = useState('Hola {nombre}, tenemos una promo para vos 🎉')
+  const [imagenUrl, setImagenUrl] = useState('')
   const [enviarATodos, setEnviarATodos] = useState(true)
   const [creadosDesde, setCreadosDesde] = useState('')
   const [creadosHasta, setCreadosHasta] = useState('')
@@ -73,6 +74,7 @@ export default function CampanaNueva() {
       nombre: nombre.trim(),
       id_sucursal: suc,
       plantilla_texto: plantilla,
+      imagen_url: imagenUrl.trim() || null,
       segmento: segmento(),
       estado: 'borrador',
       creada_por: session?.user.id,
@@ -164,6 +166,28 @@ export default function CampanaNueva() {
           onChange={(e) => setPlantilla(e.target.value)}
           className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
         />
+      </label>
+
+      <label className="block text-sm">
+        <span className="text-slate-600">Imagen (URL opcional)</span>
+        <input
+          type="url"
+          value={imagenUrl}
+          onChange={(e) => setImagenUrl(e.target.value)}
+          placeholder="https://…/foto.jpg"
+          className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
+        />
+        {imagenUrl.trim() && (
+          <img
+            key={imagenUrl}
+            src={imagenUrl.trim()}
+            alt="Vista previa de la imagen"
+            className="mt-2 h-28 rounded-md border object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none'
+            }}
+          />
+        )}
       </label>
 
       <div className="bg-slate-50 border rounded-md p-3 text-sm text-slate-600">
